@@ -1,0 +1,21 @@
+{
+  "name": "clean-typings-file",
+  "version": "0.1.0",
+  "description": "",
+  "main": "dist/clean-typings-file.js",
+  "scripts": {
+    "start": "bash watch.sh"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^10.5.2",
+    "source-map-loader": "^0.2.3",
+    "ts-loader": "^4.4.2",
+    "typescript": "^2.9.2",
+    "webpack": "^4.15.1",
+    "webpack-cli": "^3.0.8",
+    "webpack-visualizer-plugin": "^0.1.11"
+  }
+}
