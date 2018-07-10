@@ -10,7 +10,7 @@ type RootStatement = {
 };
 
 
-if(process.argv.length >= 4 && process.argv[1].endsWith("clean-typings-file.js")) {
+if(process.argv.length >= 4 && (process.argv[1].endsWith("clean-typings-file.js") || process.argv[1].endsWith("clean-typings-file"))) {
     cleanFile(process.argv[2], process.argv.slice(3));
 }
 
