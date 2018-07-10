@@ -15,6 +15,7 @@ if(process.argv.length >= 4 && process.argv[1].endsWith("clean-typings-file.js")
 }
 
 export function cleanFile(path: string, rootModuleNames: string[]) {
+    console.log(`Cleaning file ${path}, root modules ${rootModuleNames.join(", ")}`);
     let replacements: {
         range: ts.TextRange;
         newText: string;
