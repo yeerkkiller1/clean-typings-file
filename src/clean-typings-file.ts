@@ -124,6 +124,8 @@ export function cleanFile(path: string, rootModuleNames: string[]) {
         }
     }
 
+    if(replacements.length === 0) return;
+
     let result = "";
     let lastSourceEnd = 0;
     replacements.sort((a, b) => a.range.pos - b.range.pos);
