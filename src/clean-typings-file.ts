@@ -44,7 +44,7 @@ function parseReferences(tsRaw: string): ts.TextRange[] {
     return references;
 }
 
-function getPathReference(text: string): string {
+function getPathReference(text: string): string|null {
 
     function peelStart(...peels: string[]) {
         text = text.trim();
@@ -56,10 +56,11 @@ function getPathReference(text: string): string {
             if(index === 0) break;
         }
         if(index !== 0) {
-            throw new Error(`Expected text to start with string, but it did not. Text ${text} should have started with one of ${peels.join(", ")}`);
+            throw new Error(`Expected text to start with string, but it did not. Text ${text} should have started with one of [${peels.join(", ")}]`);
         }
         text = text.slice(peel.length);
         text = text.trim();
+        return peel;
     }
     function peelEnd(...peels: string[]) {
         text = text.trim();
@@ -71,16 +72,19 @@ function getPathReference(text: string): string {
             if(index === text.length - p.length) break;
         }
         if(index !== text.length - peel.length) {
-            throw new Error(`Expected text to end with string, but it did not. Text ${text} should have ended with one of ${peels.join(", ")}`);
+            throw new Error(`Expected text to end with string, but it did not. Text ${text} should have ended with one of [${peels.join(", ")}]`);
         }
         text = text.slice(0, -peel.length);
         text = text.trim();
+        return peel;
     }
 
     peelStart("///");
     peelStart("<");
     peelStart("reference");
-    peelStart("path");
+    if(peelStart("path", "types") === "types") {
+        return null;
+    }
     peelStart("=");
     peelStart(`"`, `'`);
 
@@ -130,6 +134,7 @@ export function cleanFile(path: string, rootModuleNames: string[]) {
             let fullRefPath: string;
             {
                 let referencePath = getPathReference(referenceText);
+                if(referencePath === null) continue;
                 fullRefPath = path.slice(0, path.lastIndexOf("/") + 1) + referencePath;
                 let parts = fullRefPath.split("/");
                 for(let i = 0; i < parts.length; i++) {
