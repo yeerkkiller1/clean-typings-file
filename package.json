@@ -1,13 +1,13 @@
 {
   "name": "clean-typings-file",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "",
   "main": "dist/clean-typings-file.js",
   "scripts": {
     "start": "bash watch.sh"
   },
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {},
   "devDependencies": {
     "@types/node": "^10.5.2",

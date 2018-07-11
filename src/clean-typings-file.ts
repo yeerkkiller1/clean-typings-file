@@ -14,14 +14,158 @@ if(process.argv.length >= 4 && (process.argv[1].endsWith("clean-typings-file.js"
     cleanFile(process.argv[2], process.argv.slice(3));
 }
 
+function normalizePath(path: string) {
+    return path.replace(/\\/g, "/");
+}
+
+function parseReferences(tsRaw: string): ts.TextRange[] {
+    let references: ts.TextRange[] = [];
+
+    // Parse tsRaw directly, as /// <reference... stuff isn't parsed out. This means we don't exclude block
+    //  comments correctly... but... whatever.
+    let lastPos = -1;
+    let extendedTSRaw = "\n" + tsRaw;
+    while(true) {
+        let index = extendedTSRaw.indexOf("\n///", lastPos);
+        if(index === -1) break;
+        index += 1;
+        lastPos = index;
+        
+        let referenceEnd = extendedTSRaw.indexOf("\n", index);
+        if(extendedTSRaw[referenceEnd - 1] === "\r") {
+            referenceEnd -= 1;
+        }
+
+        references.push({ pos: index - 1, end: referenceEnd - 1 });
+
+        let reference = tsRaw.slice(index, referenceEnd);
+    }
+
+    return references;
+}
+
+function getPathReference(text: string): string {
+
+    function peelStart(...peels: string[]) {
+        text = text.trim();
+        let index = -1;
+        let peel = peels[0];
+        for(let p of peels) {
+            index = text.indexOf(p);
+            peel = p;
+            if(index === 0) break;
+        }
+        if(index !== 0) {
+            throw new Error(`Expected text to start with string, but it did not. Text ${text} should have started with one of ${peels.join(", ")}`);
+        }
+        text = text.slice(peel.length);
+        text = text.trim();
+    }
+    function peelEnd(...peels: string[]) {
+        text = text.trim();
+        let index = -1;
+        let peel = peels[0];
+        for(let p of peels) {
+            index = text.lastIndexOf(p);
+            peel = p;
+            if(index === text.length - p.length) break;
+        }
+        if(index !== text.length - peel.length) {
+            throw new Error(`Expected text to end with string, but it did not. Text ${text} should have ended with one of ${peels.join(", ")}`);
+        }
+        text = text.slice(0, -peel.length);
+        text = text.trim();
+    }
+
+    peelStart("///");
+    peelStart("<");
+    peelStart("reference");
+    peelStart("path");
+    peelStart("=");
+    peelStart(`"`, `'`);
+
+    peelEnd(">");
+    peelEnd("/");
+    peelEnd(`"`, `'`);
+
+    return normalizePath(text);
+}
+
+function applyReplacements(source: string, replacements: { range: ts.TextRange; newText: string; }[]): string {
+    if(replacements.length === 0) {
+        return source;
+    }
+
+    let result = "";
+    let lastSourceEnd = 0;
+    replacements.sort((a, b) => a.range.pos - b.range.pos);
+    for(let replacement of replacements) {
+        let newEnd = replacement.range.end;
+        if(newEnd > lastSourceEnd) {
+            let sourceText = source.slice(lastSourceEnd, replacement.range.pos);
+            result += sourceText;
+            lastSourceEnd = newEnd;
+        }
+        result += replacement.newText;
+    }
+    result += source.slice(lastSourceEnd);
+
+    return result;
+}
+
 export function cleanFile(path: string, rootModuleNames: string[]) {
+    path = normalizePath(path);
+
     console.log(`Cleaning file ${path}, root modules ${rootModuleNames.join(", ")}`);
+
+    let addedReferences: { [path: string]: true } = {};
+    function inlineFileReferences(path: string): string {
+        let source = readFileSync(path).toString();
+        let referenceRanges = parseReferences(source);
+
+        let replacements: { range: ts.TextRange; newText: string; }[] = [];
+
+        for(let referenceRange of referenceRanges) {
+            let referenceText = source.slice(referenceRange.pos, referenceRange.end);
+            let fullRefPath: string;
+            {
+                let referencePath = getPathReference(referenceText);
+                fullRefPath = path.slice(0, path.lastIndexOf("/") + 1) + referencePath;
+                let parts = fullRefPath.split("/");
+                for(let i = 0; i < parts.length; i++) {
+                    let part = parts[i];
+                    if(part === "..") {
+                        if(i === 0) {
+                            parts.splice(i, 1);
+                            i -= 1;
+                        } else {
+                            parts.splice(i - 1, 2);
+                            i -= 2;
+                        }
+                    }
+                }
+                fullRefPath = parts.join("/");
+            }
+            if(fullRefPath in addedReferences) continue;
+            addedReferences[fullRefPath] = true;
+            let inlinedContents = inlineFileReferences(fullRefPath);
+            replacements.push({
+                range: referenceRange,
+                newText: inlinedContents,
+            });
+        }
+
+        return applyReplacements(source, replacements);
+    }
+
+    let tsRaw = inlineFileReferences(path);
+
+
     let replacements: {
         range: ts.TextRange;
         newText: string;
     }[] = [];
 
-    let tsRaw = readFileSync(path).toString();
     let file: RootStatement = ts.createSourceFile(
         "nothing",
         tsRaw,
@@ -98,9 +242,10 @@ export function cleanFile(path: string, rootModuleNames: string[]) {
                     start = statement.modifiers[0].pos;
                 }
                 if(statement.modifiers) {
-                    start = statement.modifiers.end;
+                    let modifierLength = statement.getFullText().length - statement.getText().length - 2;
+                    start = statement.modifiers.pos + modifierLength;
 
-                    let text = getText(statement.modifiers);
+                    let text = getText({ pos: start, end: statement.body.end });
 
                     function peelOff(textToPeel: string) {
                         if(text.endsWith(textToPeel)) {
@@ -108,7 +253,6 @@ export function cleanFile(path: string, rootModuleNames: string[]) {
                         }
                         text = text.substr(0, text.length - textToPeel.length);
                     }
-                    peelOff("declare");
                     peelOff("\n");
                     peelOff("\r");
                 }
@@ -124,21 +268,12 @@ export function cleanFile(path: string, rootModuleNames: string[]) {
         }
     }
 
-    if(replacements.length === 0) return;
-
-    let result = "";
-    let lastSourceEnd = 0;
-    replacements.sort((a, b) => a.range.pos - b.range.pos);
-    for(let replacement of replacements) {
-        let newEnd = replacement.range.end;
-        if(newEnd > lastSourceEnd) {
-            let sourceText = tsRaw.slice(lastSourceEnd, replacement.range.pos);
-            result += sourceText;
-            lastSourceEnd = newEnd;
-        }
-        result += replacement.newText;
+    if(replacements.length === 0 && Object.keys(addedReferences).length === 0) {
+        console.log(`Skipping emit, as the file requires no changes.`);
+        return;
     }
-    result += tsRaw.slice(lastSourceEnd);
+
+    let result = applyReplacements(tsRaw, replacements);
 
     writeFileSync(path, result);
 }
