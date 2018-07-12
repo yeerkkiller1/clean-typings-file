@@ -1,5 +1,5 @@
 import * as ts from "typescript";
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, stat } from "fs";
 
 interface InvalidKind { kind: ts.SyntaxKind.Unknown }
 type RootStatement = {
@@ -154,6 +154,7 @@ export function cleanFile(path: string, rootModuleNames: string[]) {
             if(fullRefPath in addedReferences) continue;
             addedReferences[fullRefPath] = true;
             let inlinedContents = inlineFileReferences(fullRefPath);
+            //console.log(`Inlined ${fullRefPath}`);
             replacements.push({
                 range: referenceRange,
                 newText: inlinedContents,
@@ -247,7 +248,7 @@ export function cleanFile(path: string, rootModuleNames: string[]) {
                     start = statement.modifiers[0].pos;
                 }
                 if(statement.modifiers) {
-                    let modifierLength = statement.getFullText().length - statement.getText().length - 2;
+                    let modifierLength = statement.getFullText().length - statement.getText().length;
                     start = statement.modifiers.pos + modifierLength;
 
                     let text = getText({ pos: start, end: statement.body.end });
@@ -279,6 +280,8 @@ export function cleanFile(path: string, rootModuleNames: string[]) {
     }
 
     let result = applyReplacements(tsRaw, replacements);
-
+    
     writeFileSync(path, result);
+
+    //console.log(`Added ${Object.keys(addedReferences).length} references, and made ${Object.keys(replacements).length} replacements`);
 }
