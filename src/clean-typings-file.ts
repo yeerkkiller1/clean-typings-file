@@ -154,7 +154,7 @@ export function cleanFile(path: string, rootModuleNames: string[]) {
             if(fullRefPath in addedReferences) continue;
             addedReferences[fullRefPath] = true;
             let inlinedContents = inlineFileReferences(fullRefPath);
-            //console.log(`Inlined ${fullRefPath}`);
+            console.log(`Inlined ${fullRefPath}`);
             replacements.push({
                 range: referenceRange,
                 newText: inlinedContents,
@@ -283,5 +283,6 @@ export function cleanFile(path: string, rootModuleNames: string[]) {
     
     writeFileSync(path, result);
 
-    //console.log(`Added ${Object.keys(addedReferences).length} references, and made ${Object.keys(replacements).length} replacements`);
+    console.log(`Added ${Object.keys(addedReferences).length} references, and made ${Object.keys(replacements).length} replacements`);
+    console.log(replacements);
 }
